@@ -16,6 +16,7 @@ const [
   trackerModule,
   reuseModule,
   playlistConfigModule,
+  { libraryManager },
 ] = await setupIsolatedBackend(
   "weekly-flow-file-reuse",
   "backend/config/db-sqlite.js",
@@ -23,6 +24,7 @@ const [
   "backend/services/weeklyFlow/weeklyFlowDownloadTracker.js",
   "backend/services/weeklyFlow/weeklyFlowFileReuse.js",
   "backend/services/weeklyFlow/weeklyFlowPlaylistConfig.js",
+  "backend/services/libraryManager.js",
 );
 
 const { downloadTracker } = trackerModule;
@@ -33,12 +35,20 @@ const {
   repairJobsUnderRemovedPlaylistDir,
   repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
+  resolveReusableTrackSource,
   restoreCompletedTrack,
   relocateSharedFilesBeforePlaylistRemoval,
   removePlaylistFileIfUnshared,
 } = reuseModule;
 
 const weeklyFlowRoot = process.env.WEEKLY_FLOW_FOLDER;
+const originalLibraryManagerMethods = {
+  getArtist: libraryManager.getArtist,
+  getAllArtists: libraryManager.getAllArtists,
+  getAlbums: libraryManager.getAlbums,
+  resolveArtistAddOptions: libraryManager.resolveArtistAddOptions,
+  addArtistWithResolvedOptions: libraryManager.addArtistWithResolvedOptions,
+};
 
 test.beforeEach(async () => {
   await resetDatabase(db);
@@ -50,6 +60,7 @@ test.beforeEach(async () => {
   });
   downloadTracker.clearAll();
   await fs.rm(weeklyFlowRoot, { recursive: true, force: true });
+  Object.assign(libraryManager, originalLibraryManagerMethods);
 });
 
 test.after(async () => {
@@ -112,6 +123,126 @@ test("reuseTrackForPlaylist does not inspect sources when reuse is disabled", as
 
   assert.equal(result.reused, false);
   assert.equal(downloadTracker.getAll().length, 0);
+});
+
+test("resolveReusableTrackSource auto-adds missing Lidarr artists when enabled", async () => {
+  dbOps.updateSettings({
+    integrations: {
+      lidarr: {
+        autoAddMissingArtists: true,
+      },
+    },
+    onboardingComplete: true,
+    flows: [],
+    sharedPlaylists: [],
+  });
+  const addCalls = [];
+  libraryManager.getArtist = async () => null;
+  libraryManager.getAllArtists = async () => [];
+  libraryManager.getAlbums = async () => [];
+  libraryManager.resolveArtistAddOptions = async () => ({
+    quality: "standard",
+    monitorOption: "none",
+    preparedAddOptions: { resolved: { rootFolderPath: "/music", qualityProfileId: 7 } },
+    rootFolderPath: "/music",
+    qualityProfileId: 7,
+    tagId: null,
+  });
+  libraryManager.addArtistWithResolvedOptions = async (mbid, artistName, options) => {
+    addCalls.push({ mbid, artistName, options });
+    return { id: 77, mbid, artistName };
+  };
+
+  const result = await resolveReusableTrackSource(
+    {
+      artistName: "Added During Import",
+      artistMbid: "11111111-1111-4111-8111-111111111111",
+      trackName: "Track",
+      albumName: "Album",
+    },
+    {
+      existingFileMode: "reuse",
+      weeklyFlowRoot,
+      targetPlaylistType: "shared-playlist-id",
+    },
+  );
+
+  assert.equal(result.source, null);
+  assert.equal(result.reason, "No reusable Aurral or Lidarr file found");
+  assert.equal(addCalls.length, 1);
+  assert.equal(addCalls[0].mbid, "11111111-1111-4111-8111-111111111111");
+  assert.equal(addCalls[0].artistName, "Added During Import");
+});
+
+test("resolveReusableTrackSource leaves missing Lidarr artists untouched when disabled", async () => {
+  let addCalls = 0;
+  libraryManager.getArtist = async () => null;
+  libraryManager.getAllArtists = async () => [];
+  libraryManager.getAlbums = async () => [];
+  libraryManager.resolveArtistAddOptions = async () => {
+    throw new Error("should not resolve add options");
+  };
+  libraryManager.addArtistWithResolvedOptions = async () => {
+    addCalls += 1;
+    return null;
+  };
+
+  const result = await resolveReusableTrackSource(
+    {
+      artistName: "Disabled Artist",
+      artistMbid: "22222222-2222-4222-8222-222222222222",
+      trackName: "Track",
+      albumName: "Album",
+    },
+    {
+      existingFileMode: "reuse",
+      weeklyFlowRoot,
+    },
+  );
+
+  assert.equal(result.source, null);
+  assert.equal(result.reason, "No reusable Aurral or Lidarr file found");
+  assert.equal(addCalls, 0);
+});
+
+test("resolveReusableTrackSource surfaces Lidarr auto-add failures", async () => {
+  dbOps.updateSettings({
+    integrations: {
+      lidarr: {
+        autoAddMissingArtists: true,
+      },
+    },
+    onboardingComplete: true,
+    flows: [],
+    sharedPlaylists: [],
+  });
+  libraryManager.getArtist = async () => null;
+  libraryManager.resolveArtistAddOptions = async () => ({
+    quality: "standard",
+    monitorOption: "none",
+    preparedAddOptions: { resolved: { rootFolderPath: "/music", qualityProfileId: 7 } },
+    rootFolderPath: "/music",
+    qualityProfileId: 7,
+    tagId: null,
+  });
+  libraryManager.addArtistWithResolvedOptions = async () => ({
+    error: "Lidarr rejected artist create",
+  });
+
+  await assert.rejects(
+    resolveReusableTrackSource(
+      {
+        artistName: "Broken Artist",
+        artistMbid: "33333333-3333-4333-8333-333333333333",
+        trackName: "Track",
+      },
+      {
+        existingFileMode: "reuse",
+        weeklyFlowRoot,
+      },
+    ),
+    /Failed to auto-add Broken Artist to Lidarr: Lidarr rejected artist create/,
+  );
 });
 
 test("repairReusableTrackLinks does nothing when reuse is disabled", async () => {

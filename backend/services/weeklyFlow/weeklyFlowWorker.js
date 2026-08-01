@@ -8,6 +8,7 @@ import { dbOps, userOps } from "../../db/helpers/index.js";
 import { resolveWeeklyFlowTrackContext } from "./weeklyFlowTrackResolver.js";
 import { getListenHistoryProfile } from "../listeningHistory.js";
 import {
+  ensureLidarrArtistForTrack,
   normalizeExistingFileMode,
   repairOrphanedPlaylistTrackPaths,
   repairReusableTrackLinks,
@@ -768,9 +769,10 @@ export class WeeklyFlowWorker {
       downloadTracker.updateMetadata(job.id, resolvedTrack);
       Object.assign(job, resolvedTrack);
       const { existingFileMode } = this.getWorkerSettings();
-      if (existingFileMode !== "download") {
+      const mode = normalizeExistingFileMode(existingFileMode);
+      if (mode !== "download") {
         const reuse = await reuseTrackForPlaylist(resolvedTrack, job.playlistType, {
-          existingFileMode,
+          existingFileMode: mode,
           weeklyFlowRoot: this.weeklyFlowRoot,
           existingJobId: job.id,
           excludeJobIds: [job.id],
@@ -797,6 +799,10 @@ export class WeeklyFlowWorker {
           };
           return;
         }
+      } else {
+        await ensureLidarrArtistForTrack(resolvedTrack, {
+          targetPlaylistType: job.playlistType,
+        });
       }
       if (!isAnyDownloadSourceConfigured()) {
         throw new Error(getDownloadSourceNotConfiguredMessage());

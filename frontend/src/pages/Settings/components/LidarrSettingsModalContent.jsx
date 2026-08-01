@@ -443,6 +443,18 @@ export function LidarrSettingsSection({
             <span>Search for missing albums when artists are added</span>
           </label>
         </SettingsArrFormGroup>
+
+        <SettingsArrFormGroup label="Auto-add missing artists for playlist imports/re-search">
+          <label className="artist-checkbox-label">
+            <input
+              type="checkbox"
+              className="artist-checkbox"
+              checked={settings.integrations?.lidarr?.autoAddMissingArtists || false}
+              onChange={(e) => updateLidarr({ autoAddMissingArtists: e.target.checked })}
+            />
+            <span>Automatically add missing artists to Lidarr during playlist import and re-search</span>
+          </label>
+        </SettingsArrFormGroup>
       </SettingsArrFieldSet>
 
       <SettingsArrFieldSet legend="Community guide">

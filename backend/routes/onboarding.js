@@ -145,6 +145,7 @@ router.post("/complete", async (req, res) => {
           lidarr.defaultMonitorOption != null
             ? String(lidarr.defaultMonitorOption)
             : current.integrations?.lidarr?.defaultMonitorOption || "none",
+        autoAddMissingArtists: lidarr.autoAddMissingArtists === true,
         searchOnAdd: lidarr.searchOnAdd === true,
       },
     };

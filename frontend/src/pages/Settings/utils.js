@@ -53,6 +53,7 @@ export const normalizeSettings = (savedSettings) => {
         url: "",
         externalUrl: "",
         apiKey: "",
+        autoAddMissingArtists: false,
         searchOnAdd: false,
         defaultMonitorOption: "none",
         ...lidarr,

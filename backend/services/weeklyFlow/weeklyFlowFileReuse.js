@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import { dbOps, userOps } from "../../db/helpers/index.js";
 import { downloadTracker } from "./weeklyFlowDownloadTracker.js";
 import {
   buildSharedTrackIdentity,
@@ -313,6 +314,62 @@ function findMatchingTrack(tracks, track) {
   );
 }
 
+function shouldAutoAddMissingLidarrArtists() {
+  return dbOps.getSettings()?.integrations?.lidarr?.autoAddMissingArtists === true;
+}
+
+function getPlaylistOwnerUser(targetPlaylistType) {
+  const playlistKey = String(targetPlaylistType || "").trim();
+  if (!playlistKey) return null;
+  const flow = flowPlaylistConfig.getFlow(playlistKey);
+  const sharedPlaylist = flowPlaylistConfig.getSharedPlaylist(playlistKey);
+  const ownerUserId = Number(flow?.ownerUserId ?? sharedPlaylist?.ownerUserId);
+  if (!Number.isFinite(ownerUserId)) return null;
+  return userOps.getUserById(ownerUserId) || null;
+}
+
+export async function ensureLidarrArtistForTrack(track, options = {}) {
+  if (!shouldAutoAddMissingLidarrArtists()) return null;
+  const artistMbid = String(track?.artistMbid || "").trim();
+  const artistName = String(track?.artistName || "").trim();
+  if (!artistMbid || !artistName) return null;
+
+  let existingArtist = null;
+  try {
+    existingArtist = await libraryManager.getArtist(artistMbid);
+  } catch (error) {
+    throw new Error(
+      `Failed to verify Lidarr artist for ${artistName}: ${error?.message || "Unknown error"}`,
+    );
+  }
+  if (existingArtist?.id) return existingArtist;
+
+  const ownerUser = options.user || getPlaylistOwnerUser(options.targetPlaylistType);
+  let resolvedOptions = null;
+  try {
+    resolvedOptions = await libraryManager.resolveArtistAddOptions({
+      user: ownerUser,
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to auto-add ${artistName} to Lidarr: ${error?.message || "Unknown error"}`,
+    );
+  }
+  if (resolvedOptions?.error) {
+    throw new Error(`Failed to auto-add ${artistName} to Lidarr: ${resolvedOptions.error}`);
+  }
+
+  const createdArtist = await libraryManager.addArtistWithResolvedOptions(
+    artistMbid,
+    artistName,
+    resolvedOptions,
+  );
+  if (createdArtist?.error) {
+    throw new Error(`Failed to auto-add ${artistName} to Lidarr: ${createdArtist.error}`);
+  }
+  return createdArtist;
+}
+
 async function findLidarrSource(track) {
   let artists = [];
   try {
@@ -367,6 +424,7 @@ export async function resolveReusableTrackSource(track, options = {}) {
   if (mode === "download") {
     return { source: null, reason: "Existing file reuse is disabled" };
   }
+  await ensureLidarrArtistForTrack(track, options);
   const aurralSource = await findAurralSource(track, options);
   if (aurralSource) return { source: aurralSource, reason: null };
   const lidarrSource = await findLidarrSource(track);

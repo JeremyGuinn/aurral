@@ -107,6 +107,7 @@ const defaultSettings = {
       metadataProfileId: null,
       tagId: null,
       defaultMonitorOption: "none",
+      autoAddMissingArtists: false,
       searchOnAdd: false,
     },
     metadata: {

@@ -148,6 +148,7 @@ function Onboarding() {
           qualityProfileId: lidarrQualityProfileId,
           metadataProfileId: lidarrMetadataProfileId,
           defaultMonitorOption: "none",
+          autoAddMissingArtists: false,
           searchOnAdd: false,
         },
       });
