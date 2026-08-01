@@ -176,6 +176,10 @@ export const dbOps = {
         result.integrations.navidrome.pathMappings,
       );
     }
+    if (result.integrations?.lidarr) {
+      result.integrations.lidarr.autoAddMissingArtists =
+        result.integrations.lidarr.autoAddMissingArtists === true;
+    }
     syncM3uPathMode(result.integrations?.navidrome?.m3uPathMode);
     syncM3uPathMappings(result.integrations?.navidrome?.pathMappings);
     settingsCache = result;
