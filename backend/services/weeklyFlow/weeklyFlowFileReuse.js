@@ -328,6 +328,18 @@ function getPlaylistOwnerUser(targetPlaylistType) {
   return userOps.getUserById(ownerUserId) || null;
 }
 
+async function ensureLidarrAlbumForTrack(track, artist) {
+  const artistId = String(artist?.id || "").trim();
+  const albumMbid = String(track?.albumMbid || "").trim();
+  const albumName = String(track?.albumName || "").trim();
+  if (!artistId || !albumMbid || !albumName) return;
+
+  const album = await libraryManager.addAlbum(artistId, albumMbid, albumName);
+  if (album?.error) {
+    throw new Error(album.error);
+  }
+}
+
 export async function ensureLidarrArtistForTrack(track, options = {}) {
   if (!shouldAutoAddMissingLidarrArtists()) return null;
   const artistMbid = String(track?.artistMbid || "").trim();
@@ -366,6 +378,13 @@ export async function ensureLidarrArtistForTrack(track, options = {}) {
   );
   if (createdArtist?.error) {
     throw new Error(`Failed to auto-add ${artistName} to Lidarr: ${createdArtist.error}`);
+  }
+  try {
+    await ensureLidarrAlbumForTrack(track, createdArtist);
+  } catch (error) {
+    throw new Error(
+      `Failed to auto-add ${artistName} release to Lidarr: ${error?.message || "Unknown error"}`,
+    );
   }
   return createdArtist;
 }

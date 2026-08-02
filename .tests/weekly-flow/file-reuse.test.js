@@ -48,6 +48,7 @@ const originalLibraryManagerMethods = {
   getAlbums: libraryManager.getAlbums,
   resolveArtistAddOptions: libraryManager.resolveArtistAddOptions,
   addArtistWithResolvedOptions: libraryManager.addArtistWithResolvedOptions,
+  addAlbum: libraryManager.addAlbum,
 };
 
 test.beforeEach(async () => {
@@ -137,6 +138,7 @@ test("resolveReusableTrackSource auto-adds missing Lidarr artists when enabled",
     sharedPlaylists: [],
   });
   const addCalls = [];
+  const addAlbumCalls = [];
   libraryManager.getArtist = async () => null;
   libraryManager.getAllArtists = async () => [];
   libraryManager.getAlbums = async () => [];
@@ -152,6 +154,10 @@ test("resolveReusableTrackSource auto-adds missing Lidarr artists when enabled",
     addCalls.push({ mbid, artistName, options });
     return { id: 77, mbid, artistName };
   };
+  libraryManager.addAlbum = async (artistId, albumMbid, albumName) => {
+    addAlbumCalls.push({ artistId, albumMbid, albumName });
+    return { id: 91, artistId, mbid: albumMbid, albumName, monitored: true };
+  };
 
   const result = await resolveReusableTrackSource(
     {
@@ -159,6 +165,7 @@ test("resolveReusableTrackSource auto-adds missing Lidarr artists when enabled",
       artistMbid: "11111111-1111-4111-8111-111111111111",
       trackName: "Track",
       albumName: "Album",
+      albumMbid: "88888888-1111-4222-8333-999999999999",
     },
     {
       existingFileMode: "reuse",
@@ -172,6 +179,9 @@ test("resolveReusableTrackSource auto-adds missing Lidarr artists when enabled",
   assert.equal(addCalls.length, 1);
   assert.equal(addCalls[0].mbid, "11111111-1111-4111-8111-111111111111");
   assert.equal(addCalls[0].artistName, "Added During Import");
+  assert.equal(addAlbumCalls.length, 1);
+  assert.equal(addAlbumCalls[0].artistId, "77");
+  assert.equal(addAlbumCalls[0].albumName, "Album");
 });
 
 test("resolveReusableTrackSource leaves missing Lidarr artists untouched when disabled", async () => {
