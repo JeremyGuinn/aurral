@@ -12,9 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.23.2
           cache: npm
@@ -22,19 +22,19 @@ jobs:
 
       - name: Ensure validation runtime dependencies
         run: |
-          if command -v fc-match >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1; then
+          if command -v fc-match >/dev/null 2>&1 && command -v ffmpeg >/dev/null 2>&1 && [ "$(fc-match -f '%{family}' 'Noto Color Emoji')" = "Noto Color Emoji" ]; then
             exit 0
           fi
 
           if [ "$(id -u)" -eq 0 ]; then
             apt-get update
-            apt-get install -y ffmpeg fontconfig fonts-dejavu-core
+            apt-get install -y ffmpeg fontconfig fonts-dejavu-core fonts-noto-color-emoji
           elif command -v sudo >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y ffmpeg fontconfig fonts-dejavu-core
+            sudo apt-get install -y ffmpeg fontconfig fonts-dejavu-core fonts-noto-color-emoji
           else
             echo "ffmpeg and fontconfig are required for validation."
-            echo "Install ffmpeg, fontconfig, and fonts-dejavu-core on the runner."
+            echo "Install ffmpeg, fontconfig, fonts-dejavu-core, and fonts-noto-color-emoji on the runner."
             exit 1
           fi
 
